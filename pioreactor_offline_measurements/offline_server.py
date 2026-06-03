@@ -24,14 +24,17 @@ DB_PATH = config.get("storage", "database")
 
 TABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
-# Per-table columns the form should hide because the server fills them in.
-# `experiment` is always hidden by the form (it has its own dropdown).
-# `pioreactor_unit` and `timestamp` are auto-filled if omitted; we still let
-# the form show them by default for transparency, but per-table overrides
-# can hide them too.
-HIDDEN_COLUMNS: dict[str, set[str]] = {
-    "od_readings": {"angle", "channel", "pioreactor_unit"},
+# For each known table, the single "value" column the user actually enters.
+# The form shows: experiment (dropdown), pioreactor_unit, timestamp, value.
+# Every other column is hidden in the schema response; the server auto-fills
+# what it needs (e.g. angle/channel for od_readings).
+VALUE_COLUMNS: dict[str, str] = {
+    "cdw_readings": "cdw_g_per_l",
+    "od_readings": "od_reading",
+    "growth_rates": "rate",
+    "temperature_readings": "temperature_c",
 }
+ALWAYS_VISIBLE = {"experiment", "pioreactor_unit", "timestamp"}
 
 
 def _allowed_tables() -> list[str]:
@@ -48,7 +51,10 @@ def _table_info(table: str) -> list[dict]:
         raise ValueError(f"bad table name: {table!r}")
     with _ro_connect() as conn:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
-    hidden = HIDDEN_COLUMNS.get(table, set())
+    value_col = VALUE_COLUMNS.get(table)
+    visible = ALWAYS_VISIBLE | ({value_col} if value_col else set())
+    # If table isn't in VALUE_COLUMNS, fall back to showing everything (no auto-hide).
+    auto_hide = value_col is not None
     return [
         {
             "name": r[1],
@@ -56,7 +62,7 @@ def _table_info(table: str) -> list[dict]:
             "notnull": r[3],
             "dflt_value": r[4],
             "pk": r[5],
-            "hidden": r[1] in hidden,
+            "hidden": auto_hide and r[1] not in visible,
         }
         for r in rows
     ]
