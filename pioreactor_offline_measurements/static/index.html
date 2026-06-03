@@ -82,6 +82,7 @@ async function loadSchema() {
   for (const col of schema) {
     if (col.pk) continue;
     if (HIDDEN_COLS.has(col.name)) continue;
+    if (col.hidden) continue;
     const required = !!col.notnull && col.dflt_value === null;
     const div = document.createElement("div");
     div.className = "row";
