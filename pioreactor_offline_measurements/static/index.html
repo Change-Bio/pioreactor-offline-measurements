@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Offline measurements</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.4 system-ui, -apple-system, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 1rem; }
+  label { display: block; margin: 0.6rem 0 0.2rem; font-weight: 600; }
+  input, select, button { font: inherit; padding: 0.4rem 0.6rem; box-sizing: border-box; width: 100%; }
+  button { width: auto; margin-top: 1rem; cursor: pointer; }
+  .row { margin-bottom: 0.4rem; }
+  .opt { color: #888; font-weight: normal; font-size: 0.85em; }
+  #status { margin-top: 1rem; padding: 0.6rem; border-radius: 4px; display: none; }
+  #status.ok { display: block; background: #d1f5d3; color: #064; }
+  #status.err { display: block; background: #fdd; color: #800; }
+  .meta { font-size: 0.85em; color: #666; }
+</style>
+</head>
+<body>
+<h1>Offline measurements</h1>
+
+<div class="row">
+  <label for="table">Table</label>
+  <select id="table"></select>
+</div>
+
+<div class="row">
+  <label for="experiment">Experiment</label>
+  <select id="experiment"></select>
+</div>
+
+<div id="fields"></div>
+
+<button id="submit">Submit</button>
+
+<div id="status"></div>
+
+<script>
+const tableEl = document.getElementById("table");
+const expEl = document.getElementById("experiment");
+const fieldsEl = document.getElementById("fields");
+const statusEl = document.getElementById("status");
+const submitBtn = document.getElementById("submit");
+
+const HIDDEN_COLS = new Set(["experiment"]);  // experiment has its own dropdown
+
+async function init() {
+  const [tables, experiments] = await Promise.all([
+    fetch("api/tables").then(r => r.json()),
+    fetch("api/experiments").then(r => r.json()),
+  ]);
+  for (const t of tables) {
+    const o = document.createElement("option");
+    o.value = o.textContent = t;
+    tableEl.appendChild(o);
+  }
+  for (const e of experiments) {
+    const o = document.createElement("option");
+    o.value = o.textContent = e;
+    expEl.appendChild(o);
+  }
+  await loadSchema();
+  tableEl.addEventListener("change", loadSchema);
+}
+
+function inputTypeFor(sqlType) {
+  const t = (sqlType || "").toUpperCase();
+  if (t.includes("INT")) return { type: "number", step: "1" };
+  if (["REAL","FLOAT","DOUB","NUMERIC","DECIMAL"].some(k => t.includes(k))) return { type: "number", step: "any" };
+  if (t.includes("TIMESTAMP") || t.includes("DATETIME") || t.includes("DATE")) return { type: "datetime-local" };
+  return { type: "text" };
+}
+
+async function loadSchema() {
+  fieldsEl.innerHTML = "";
+  const table = tableEl.value;
+  const schema = await fetch("api/schema?table=" + encodeURIComponent(table)).then(r => r.json());
+  if (schema.error) { fieldsEl.textContent = "Error: " + schema.error; return; }
+  for (const col of schema) {
+    if (col.pk) continue;
+    if (HIDDEN_COLS.has(col.name)) continue;
+    const required = !!col.notnull && col.dflt_value === null;
+    const div = document.createElement("div");
+    div.className = "row";
+    const label = document.createElement("label");
+    label.htmlFor = "f_" + col.name;
+    label.innerHTML = col.name + ` <span class="opt">${col.type || "ANY"}${required ? "" : " · optional"}</span>`;
+    const { type, step } = inputTypeFor(col.type);
+    const input = document.createElement("input");
+    input.id = "f_" + col.name;
+    input.name = col.name;
+    input.type = type;
+    if (step) input.step = step;
+    if (required) input.required = true;
+    if (type === "datetime-local") {
+      const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+      input.value = now.toISOString().slice(0, 16);
+    }
+    div.appendChild(label);
+    div.appendChild(input);
+    fieldsEl.appendChild(div);
+  }
+}
+
+function collectValues() {
+  const values = { experiment: expEl.value };
+  for (const inp of fieldsEl.querySelectorAll("input")) {
+    let v = inp.value;
+    if (v === "") continue;
+    if (inp.type === "datetime-local") {
+      // datetime-local is local time without TZ; convert to UTC ISO-Z
+      v = new Date(v).toISOString();
+    }
+    values[inp.name] = v;
+  }
+  return values;
+}
+
+submitBtn.addEventListener("click", async () => {
+  statusEl.className = "";
+  statusEl.textContent = "Submitting...";
+  statusEl.style.display = "block";
+  const body = { table: tableEl.value, values: collectValues() };
+  try {
+    const resp = await fetch("api/insert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      statusEl.className = "ok";
+      statusEl.innerHTML = "Published. <span class='meta'>" + JSON.stringify(data.row) + "</span>";
+    } else {
+      statusEl.className = "err";
+      statusEl.textContent = "Error: " + (data.error || resp.statusText);
+    }
+  } catch (e) {
+    statusEl.className = "err";
+    statusEl.textContent = "Network error: " + e;
+  }
+});
+
+init().catch(e => {
+  fieldsEl.textContent = "Init failed: " + e;
+});
+</script>
+</body>
+</html>
