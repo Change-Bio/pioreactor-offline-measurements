@@ -16,6 +16,7 @@ setup(
     package_data={
         "pioreactor_offline_measurements": [
             "additional_config.ini",
+            "additional_sql.sql",
             "LEADER_ONLY",
             "post_install.sh",
             "pre_uninstall.sh",

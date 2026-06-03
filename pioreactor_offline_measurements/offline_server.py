@@ -33,6 +33,9 @@ VALUE_COLUMNS: dict[str, str] = {
     "od_readings": "od_reading",
     "growth_rates": "rate",
     "temperature_readings": "temperature_c",
+    "liquid_volumes": "liquid_volume",
+    "stirring_rates": "measured_rpm",
+    "airflow_readings": "airflow_lpm",
 }
 ALWAYS_VISIBLE = {"experiment", "pioreactor_unit", "timestamp"}
 

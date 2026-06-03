@@ -1,6 +1,7 @@
 include LICENSE.txt
 include README.md
 include pioreactor_offline_measurements/additional_config.ini
+include pioreactor_offline_measurements/additional_sql.sql
 include pioreactor_offline_measurements/LEADER_ONLY
 include pioreactor_offline_measurements/post_install.sh
 include pioreactor_offline_measurements/pre_uninstall.sh
