@@ -1,8 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+# `pio plugins install` runs this as the pioreactor user; the writes to
+# /etc/systemd and /etc/lighttpd need sudo. pioreactor has NOPASSWD sudo on
+# the leader for these system files.
+
 # Install systemd unit for the offline-measurements HTTP server
-cat > /etc/systemd/system/pioreactor-offline-server.service << 'EOF'
+sudo tee /etc/systemd/system/pioreactor-offline-server.service > /dev/null << 'EOF'
 [Unit]
 Description=Pioreactor Offline Measurements Server
 After=network.target
@@ -20,12 +24,12 @@ Environment=PYTHONUNBUFFERED=1
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable pioreactor-offline-server.service
-systemctl restart pioreactor-offline-server.service
+sudo systemctl daemon-reload
+sudo systemctl enable pioreactor-offline-server.service
+sudo systemctl restart pioreactor-offline-server.service
 
 # Lighttpd reverse-proxy /offline -> 127.0.0.1:8191
-cat > /etc/lighttpd/conf-enabled/53-offline.conf << 'LCONF'
+sudo tee /etc/lighttpd/conf-enabled/53-offline.conf > /dev/null << 'LCONF'
 server.modules += ("mod_proxy")
 
 $HTTP["url"] == "/offline" {
@@ -38,7 +42,7 @@ $HTTP["url"] =~ "^/offline/" {
 }
 LCONF
 
-systemctl reload lighttpd || systemctl restart lighttpd
+sudo systemctl reload lighttpd || sudo systemctl restart lighttpd
 
 # Restart mqtt_to_db_streaming so it picks up the new parsers registered
 # at plugin import time. Tolerate failures (e.g. job not running yet on a
