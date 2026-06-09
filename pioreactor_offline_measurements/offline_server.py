@@ -78,20 +78,51 @@ def _experiments() -> list[str]:
         ).fetchall()]
 
 
-def _coerce(value, sql_type: str):
+def _units() -> list[str]:
+    # Active units first, then the rest, each alphabetically.
+    with _ro_connect() as conn:
+        return [r[0] for r in conn.execute(
+            "SELECT pioreactor_unit FROM workers "
+            "ORDER BY is_active DESC, pioreactor_unit ASC"
+        ).fetchall()]
+
+
+def _is_datetime_col(col_name: str, sql_type: str) -> bool:
+    # Pioreactor declares timestamp columns as TEXT, so the column *name* is the
+    # reliable signal -- type alone (TEXT) would skip validation entirely.
+    t = (sql_type or "").upper()
+    return (
+        col_name.lower() == "timestamp"
+        or "TIMESTAMP" in t
+        or "DATETIME" in t
+        or "DATE" in t
+    )
+
+
+def _coerce(value, sql_type: str, col_name: str = ""):
     t = (sql_type or "").upper()
     if value is None or value == "":
         return None
+    if _is_datetime_col(col_name, sql_type):
+        s = str(value).strip()
+        # accept trailing Z as the +00:00 offset
+        norm = s[:-1] + "+00:00" if s.endswith("Z") else s
+        try:
+            dt = datetime.fromisoformat(norm)
+        except ValueError:
+            raise ValueError(
+                f"{value!r} is not a valid datetime (use the date/time picker)"
+            )
+        if dt.tzinfo is None:
+            raise ValueError(
+                f"{value!r} has no timezone (append 'Z' for UTC, or use the picker)"
+            )
+        # store as RFC3339 with a trailing Z, matching the rest of the table
+        return dt.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     if "INT" in t:
         return int(value)
     if any(k in t for k in ("REAL", "FLOAT", "DOUB", "NUMERIC", "DECIMAL")):
         return float(value)
-    if "TIMESTAMP" in t or "DATETIME" in t or "DATE" in t:
-        s = str(value)
-        # accept trailing Z
-        s = s[:-1] + "+00:00" if s.endswith("Z") else s
-        datetime.fromisoformat(s)  # validation only
-        return s
     return str(value)
 
 
@@ -108,7 +139,7 @@ def _build_row(table: str, raw_values: dict) -> dict:
         if name not in col_by_name:
             continue  # forgiving: drop unknown keys
         try:
-            coerced = _coerce(val, col_by_name[name]["type"])
+            coerced = _coerce(val, col_by_name[name]["type"], name)
         except (ValueError, TypeError) as e:
             errors.append(f"column {name}: {e}")
             continue
@@ -175,6 +206,12 @@ class OfflineHandler(SimpleHTTPRequestHandler):
         if path == "/api/experiments":
             try:
                 return self._json_response(_experiments())
+            except sqlite3.Error as e:
+                return self._json_response({"error": str(e)}, status=500)
+
+        if path == "/api/units":
+            try:
+                return self._json_response(_units())
             except sqlite3.Error as e:
                 return self._json_response({"error": str(e)}, status=500)
 

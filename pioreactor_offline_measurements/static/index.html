@@ -5,73 +5,177 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Offline measurements</title>
 <style>
-  :root { color-scheme: light dark; }
-  body { font: 15px/1.4 system-ui, -apple-system, sans-serif; max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
-  h1 { font-size: 1.25rem; margin: 0 0 1rem; }
-  label { display: block; margin: 0.6rem 0 0.2rem; font-weight: 600; }
-  input, select, button { font: inherit; padding: 0.4rem 0.6rem; box-sizing: border-box; width: 100%; }
-  button { width: auto; margin-top: 1rem; cursor: pointer; }
-  .row { margin-bottom: 0.4rem; }
-  .opt { color: #888; font-weight: normal; font-size: 0.85em; }
-  #status { margin-top: 1rem; padding: 0.6rem; border-radius: 4px; display: none; }
-  #status.ok { display: block; background: #d1f5d3; color: #064; }
-  #status.err { display: block; background: #fdd; color: #800; }
-  .meta { font-size: 0.85em; color: #666; }
+  /* Approximates the Pioreactor UI (MUI). Accent below is easy to retheme. */
+  :root {
+    --accent: #5331CA;
+    --accent-hover: #41279e;
+    --border: #c4c4c4;
+    --border-focus: var(--accent);
+    --label: #555;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok-bg: #edf7ed; --ok-fg: #1e4620;
+    --err-bg: #fdeded; --err-fg: #5f2120;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font: 15px/1.5 Roboto, system-ui, -apple-system, "Helvetica Neue", sans-serif;
+    background: var(--bg);
+    color: #222;
+    margin: 0;
+    padding: 2rem 1rem;
+  }
+  .card {
+    max-width: 560px;
+    margin: 0 auto;
+    background: var(--card);
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+    padding: 1.5rem 1.75rem 1.75rem;
+  }
+  h1 {
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin: 0 0 .25rem;
+  }
+  .sub { color: #777; font-size: .85rem; margin: 0 0 1.25rem; }
+
+  .field { position: relative; margin: 1.25rem 0; }
+  .field > label {
+    display: block;
+    font-size: .78rem;
+    color: var(--label);
+    margin-bottom: .3rem;
+    font-weight: 500;
+    letter-spacing: .01em;
+  }
+  .field .type { color: #9a9a9a; font-weight: 400; }
+  input, select {
+    width: 100%;
+    font: inherit;
+    padding: .65rem .75rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+    color: inherit;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus {
+    outline: none;
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 1px var(--border-focus);
+  }
+  .help { font-size: .75rem; color: #888; margin-top: .3rem; }
+  .help a { color: var(--accent); cursor: pointer; text-decoration: none; }
+  .help a:hover { text-decoration: underline; }
+
+  button#submit {
+    margin-top: 1.5rem;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: .6rem 1.4rem;
+    font: 500 .95rem Roboto, system-ui, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    transition: background .15s;
+  }
+  button#submit:hover { background: var(--accent-hover); }
+  button#submit:disabled { background: #bbb; cursor: default; box-shadow: none; }
+
+  #status {
+    margin-top: 1.25rem;
+    padding: .75rem 1rem;
+    border-radius: 4px;
+    display: none;
+    font-size: .9rem;
+  }
+  #status.ok  { display: block; background: var(--ok-bg);  color: var(--ok-fg); }
+  #status.err { display: block; background: var(--err-bg); color: var(--err-fg); }
+  #status .meta { display: block; margin-top: .35rem; font-size: .78rem; opacity: .85; word-break: break-word; }
 </style>
 </head>
 <body>
-<h1>Offline measurements</h1>
+<div class="card">
+  <h1>Record offline measurement</h1>
+  <p class="sub">Manually log a lab measurement into the leader database.</p>
 
-<div class="row">
-  <label for="table">Table</label>
-  <select id="table"></select>
+  <div class="field">
+    <label for="table">Measurement type</label>
+    <select id="table"></select>
+  </div>
+
+  <div class="field">
+    <label for="experiment">Experiment</label>
+    <select id="experiment"></select>
+  </div>
+
+  <div class="field">
+    <label for="unit">Pioreactor unit</label>
+    <select id="unit"></select>
+  </div>
+
+  <div id="fields"></div>
+
+  <button id="submit">Submit</button>
+  <div id="status"></div>
 </div>
-
-<div class="row">
-  <label for="experiment">Experiment</label>
-  <select id="experiment"></select>
-</div>
-
-<div id="fields"></div>
-
-<button id="submit">Submit</button>
-
-<div id="status"></div>
 
 <script>
-const tableEl = document.getElementById("table");
-const expEl = document.getElementById("experiment");
+const tableEl  = document.getElementById("table");
+const expEl    = document.getElementById("experiment");
+const unitEl   = document.getElementById("unit");
 const fieldsEl = document.getElementById("fields");
 const statusEl = document.getElementById("status");
 const submitBtn = document.getElementById("submit");
 
-const HIDDEN_COLS = new Set(["experiment"]);  // experiment has its own dropdown
+// experiment + pioreactor_unit have their own dedicated dropdowns above.
+const HIDDEN_COLS = new Set(["experiment", "pioreactor_unit"]);
+
+function fillSelect(el, items) {
+  el.innerHTML = "";
+  for (const it of items) {
+    const o = document.createElement("option");
+    o.value = o.textContent = it;
+    el.appendChild(o);
+  }
+}
 
 async function init() {
-  const [tables, experiments] = await Promise.all([
+  const [tables, experiments, units] = await Promise.all([
     fetch("api/tables").then(r => r.json()),
     fetch("api/experiments").then(r => r.json()),
+    fetch("api/units").then(r => r.json()),
   ]);
-  for (const t of tables) {
-    const o = document.createElement("option");
-    o.value = o.textContent = t;
-    tableEl.appendChild(o);
-  }
-  for (const e of experiments) {
-    const o = document.createElement("option");
-    o.value = o.textContent = e;
-    expEl.appendChild(o);
-  }
+  fillSelect(tableEl, tables);
+  fillSelect(expEl, experiments);
+  fillSelect(unitEl, units);
   await loadSchema();
   tableEl.addEventListener("change", loadSchema);
 }
 
-function inputTypeFor(sqlType) {
-  const t = (sqlType || "").toUpperCase();
+// A column is a datetime if its declared type says so OR it's named `timestamp`
+// (Pioreactor declares timestamp columns as TEXT, so name is the reliable signal).
+function isDatetime(col) {
+  const t = (col.type || "").toUpperCase();
+  return col.name.toLowerCase() === "timestamp"
+      || t.includes("TIMESTAMP") || t.includes("DATETIME") || t.includes("DATE");
+}
+
+function inputTypeFor(col) {
+  const t = (col.type || "").toUpperCase();
+  if (isDatetime(col)) return { type: "datetime-local" };
   if (t.includes("INT")) return { type: "number", step: "1" };
   if (["REAL","FLOAT","DOUB","NUMERIC","DECIMAL"].some(k => t.includes(k))) return { type: "number", step: "any" };
-  if (t.includes("TIMESTAMP") || t.includes("DATETIME") || t.includes("DATE")) return { type: "datetime-local" };
   return { type: "text" };
+}
+
+function nowLocalForInput() {
+  const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
+  return now.toISOString().slice(0, 16);
 }
 
 async function loadSchema() {
@@ -80,39 +184,53 @@ async function loadSchema() {
   const schema = await fetch("api/schema?table=" + encodeURIComponent(table)).then(r => r.json());
   if (schema.error) { fieldsEl.textContent = "Error: " + schema.error; return; }
   for (const col of schema) {
-    if (col.pk) continue;
-    if (HIDDEN_COLS.has(col.name)) continue;
-    if (col.hidden) continue;
+    if (col.pk || HIDDEN_COLS.has(col.name) || col.hidden) continue;
+    const dt = isDatetime(col);
     const required = !!col.notnull && col.dflt_value === null;
-    const div = document.createElement("div");
-    div.className = "row";
+
+    const field = document.createElement("div");
+    field.className = "field";
+
     const label = document.createElement("label");
     label.htmlFor = "f_" + col.name;
-    label.innerHTML = col.name + ` <span class="opt">${col.type || "ANY"}${required ? "" : " · optional"}</span>`;
-    const { type, step } = inputTypeFor(col.type);
+    label.innerHTML = col.name +
+      ` <span class="type">${col.type || "ANY"}${required ? "" : " · optional"}</span>`;
+
+    const { type, step } = inputTypeFor(col);
     const input = document.createElement("input");
     input.id = "f_" + col.name;
     input.name = col.name;
     input.type = type;
     if (step) input.step = step;
     if (required) input.required = true;
-    if (type === "datetime-local") {
-      const now = new Date(Date.now() - new Date().getTimezoneOffset() * 60000);
-      input.value = now.toISOString().slice(0, 16);
+    if (type === "datetime-local") input.value = nowLocalForInput();
+
+    field.appendChild(label);
+    field.appendChild(input);
+
+    if (dt) {
+      const help = document.createElement("div");
+      help.className = "help";
+      help.innerHTML = `Your local time — stored as UTC. <a id="now_${col.name}">Set to now</a>`;
+      field.appendChild(help);
     }
-    div.appendChild(label);
-    div.appendChild(input);
-    fieldsEl.appendChild(div);
+
+    fieldsEl.appendChild(field);
+
+    if (dt) {
+      const link = document.getElementById("now_" + col.name);
+      if (link) link.addEventListener("click", () => { input.value = nowLocalForInput(); });
+    }
   }
 }
 
 function collectValues() {
-  const values = { experiment: expEl.value };
+  const values = { experiment: expEl.value, pioreactor_unit: unitEl.value };
   for (const inp of fieldsEl.querySelectorAll("input")) {
     let v = inp.value;
     if (v === "") continue;
     if (inp.type === "datetime-local") {
-      // datetime-local is local time without TZ; convert to UTC ISO-Z
+      // local time without TZ -> UTC RFC3339 with Z (e.g. 2026-06-08T16:00:00.000Z)
       v = new Date(v).toISOString();
     }
     values[inp.name] = v;
@@ -121,8 +239,9 @@ function collectValues() {
 }
 
 submitBtn.addEventListener("click", async () => {
+  submitBtn.disabled = true;
   statusEl.className = "";
-  statusEl.textContent = "Submitting...";
+  statusEl.textContent = "Submitting…";
   statusEl.style.display = "block";
   const body = { table: tableEl.value, values: collectValues() };
   try {
@@ -134,7 +253,7 @@ submitBtn.addEventListener("click", async () => {
     const data = await resp.json();
     if (resp.ok) {
       statusEl.className = "ok";
-      statusEl.innerHTML = "Published. <span class='meta'>" + JSON.stringify(data.row) + "</span>";
+      statusEl.innerHTML = "Saved. <span class='meta'>" + JSON.stringify(data.row) + "</span>";
     } else {
       statusEl.className = "err";
       statusEl.textContent = "Error: " + (data.error || resp.statusText);
@@ -142,12 +261,12 @@ submitBtn.addEventListener("click", async () => {
   } catch (e) {
     statusEl.className = "err";
     statusEl.textContent = "Network error: " + e;
+  } finally {
+    submitBtn.disabled = false;
   }
 });
 
-init().catch(e => {
-  fieldsEl.textContent = "Init failed: " + e;
-});
+init().catch(e => { fieldsEl.textContent = "Init failed: " + e; });
 </script>
 </body>
 </html>
